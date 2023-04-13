@@ -5,8 +5,15 @@
 
 import sys
 
+# Help command
+def list_commands():
+    pass
+
+def handle_input():
+    pass
+
 def main():
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main)
+    sys.exit(main())
