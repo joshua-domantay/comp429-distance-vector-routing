@@ -21,7 +21,14 @@ def valid_ip(ip_addr):
             return False
     return True
 
-def create_topology(file_name):
+def valid_port(port):
+    if(port.isdecimal()):
+        n = int(port)
+        if((n >= 0) and (n <= 65535)):
+            return True
+    return False
+
+def read_topology(file_name):
     topology_file = open(file_name, 'r')
     topology_file_contents = []
     for line in topology_file.readlines():
@@ -99,13 +106,17 @@ def create_topology(file_name):
     # But program will still work even if num_neighbors > 0
     return True
 
+def create_topology(file_name):
+    if not read_topology(file_name):    # Error reading topology file
+        return False
+    return True
+
 def check_server_id_errors(server_id):
-    if not server_id.isdigit():
+    if (not isinstance(server_id, int)) and (not server_id.isdigit()):
         return 2
 
-    # TODO: Check if server_id is in topology
-    # if
-    # return 1
+    if not servers.get(server_id):
+        return 1
 
     return 0
     
@@ -201,6 +212,20 @@ def handle_input():
 def valid_args(args):
     valid = True    # Instead of returning immediately, use boolean so it prints all errors
 
+    # Check first if args contain port number
+    if args.port_number is None:
+        print("Port number is missing\nUse -h or --help for more information")
+        return False
+    
+    # Check if port number is valid
+    if not valid_port(args.port_number):
+        print("Port number is invalid")
+        return False
+
+    # Check if no args satisfied
+    if (args.topology_file_name is None) and (args.update_interval is None):
+        return      # Return None which means not applicable
+
     # Check if all args satisfied
     if (args.topology_file_name is None) or (args.update_interval is None):
         if args.topology_file_name is None:
@@ -229,17 +254,26 @@ def valid_args(args):
 
     return valid
 
+def check_args(args):
+    has_args = valid_args(args)
+    if has_args == False:       # Has args but not satisfied properly
+        return False
+    elif (has_args == True) and (not create_topology(args.topology_file_name)):     # Error reading topology file
+        return False
+    return True
+
 def main(args):
-    # Check if argument is missing
-    if not valid_args(args):
-        return 1
-    if not create_topology(args.topology_file_name):
+    # Check if there are arguments
+    if not check_args(args):
         return 1
     handle_input()
     return 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("-p",
+                        dest="port_number",
+                        help="port number for server")
     parser.add_argument("-t",
                         dest="topology_file_name",
                         help="topology file that contains initial topology configuration and link cost to neighbors")
