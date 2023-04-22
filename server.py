@@ -5,10 +5,17 @@
 
 import sys
 import os
+import _thread
 import argparse
+from socket import *
 
+port = 0
 servers = {}            # server_id : (ip, port) -> servers.get(server_id) = (IP address, port number)
 routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost
+
+def get_ip():
+    hostname = gethostname()
+    return gethostbyname(hostname)      # Return ip address
 
 def valid_ip(ip_addr):
     ip_addr_split = ip_addr.split(".")
@@ -64,6 +71,7 @@ def read_topology(file_name):
             #     print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format())
             #     return
 
+            # Check if data is already recorded
             for server in servers:
                 # Check if server id is already recorded
                 if server == int(server_id):
@@ -122,12 +130,14 @@ def check_server_id_errors(server_id):
     
 def check_server_id(server_id):
     error = check_server_id_errors(server_id)
+    errorMsg = []
     if error == 2:
-        print("Server id \"" + server_id + "\" is not a digit")
+        errorMsg.append("Server id \"" + server_id + "\" is not a digit")
     elif error == 1:
-        print("Cannot find server id \"" + server_id + "\"")
+        errorMsg.append("Cannot find server id \"" + server_id + "\"")
     else:
         return True
+    return errorMsg
 
 # Command help
 def list_commands():
@@ -147,19 +157,34 @@ def list_commands():
 
 # Command update
 def update(server_id1, server_id2, link_cost):
-    # Check arguments
+    # Check arguments for error
     valid = True
-    if not check_server_id(server_id1):
+    errorMsg = []
+
+    # Check if server_id1 is valid, else add to errorMsg
+    check1 = check_server_id(server_id1)
+    if check1 != True:
+        for i in check1:
+            errorMsg.append(i)
         valid = False
-    if not check_server_id(server_id2):
+
+    # Check if server_id2 is valid, else add to errorMsg
+    check2 = check_server_id(server_id2)
+    if check2 != True:
+        for i in check2:
+            errorMsg.append(i)
         valid = False
+
+    # Check if link_cost is valid
     if not link_cost.isdigit():
-        print("Link cost must be a positive integer or infinity (inf)")
+        errorMsg.append("Link cost must be a positive integer or infinity (inf)")
         valid = False
+
     if not valid:
-        return
+        return errorMsg     # Return list of error messages
     
     print("update <server_id1> <server_id2> <link_cost>")
+    return True
 
 # Command step
 def send_routing_update():
@@ -175,8 +200,10 @@ def display_routing_table():
 
 # Command disable
 def disable_server(server_id):
-    if not check_server_id(server_id):
-        return
+    checkId = check_server_id(server_id)
+    if checkId != True:
+        return checkId
+    
     print("disable <server_id>")
 
 # Command crash
@@ -188,26 +215,65 @@ def handle_input():
         user_input = input(">> ")
         user_input = user_input.lower().split(" ")
         if user_input[0] == "help":
+            print("help SUCCESS")
             list_commands()
         if user_input[0] == "update":
             if len(user_input) == 4:
-                update(user_input[1], user_input[2], user_input[3])
+                updated = update(user_input[1], user_input[2], user_input[3])
+                if updated == True:
+                    print("update SUCCESS")
+                else:
+                    print("update " + ". ".join(updated))
             else:
-                print("Please provide two server ids and link cost. Use \"help\" for more info")
+                print("update Please provide two server ids and link cost. Use \"help\" for more info")
         if user_input[0] == "step":
+            print("step SUCCESS")
             send_routing_update()
         if user_input[0] == "packets":
+            print("packets SUCCESS")
             display_packets()
         if user_input[0] == "display":
+            print("display SUCCESS")
             display_routing_table()
         if user_input[0] == "disable":
             if len(user_input) == 2:
-                disable_server(user_input[1])
+                disabled = disable_server(user_input[1])
+                if disabled == True:
+                    print("disable SUCCESS")
+                else:
+                    print("disable " + ". ".join(disabled))
             else:
-                print("Please provide server id. Use \"help\" for more info")
+                print("disable Please provide server id. Use \"help\" for more info")
         if user_input[0] == "crash":
+            print("crash SUCCESS")
             crash()
+            break
         print()
+
+def setup_server():
+    # server_socket = socket(AF_INET, SOCK_STREAM)
+    # server_socket.bind((myip(), port))
+    # server_socket.listen(1)
+    while True:
+        # conn_socket, addr = server_socket.accept()
+        # msg = conn_socket.recv(1024).decode()
+        # msg_info = msg[:20]
+        # msg_info = msg_info.split(" ")
+        
+        # if(msg_info[0] == "msg"):       # When message is received
+        #     real_msg = msg[(len(msg_info[0]) + 1 + len(msg_info[1]) + 1):]
+        #     print("\nMessage received from", addr[0])
+        #     print("Sender's Port:", msg_info[1])
+        #     print("Message:", real_msg)
+        # elif(msg_info[0] == "con"):     # When other peer tries to connect
+        #     print("\nThe following peer established a connection with you:")
+        #     print(f"\t\tIP: {addr[0]}, Port: {msg_info[1]}")
+        # else:       # When peer uses terminate
+        #     print(f"\nPeer {addr[0]} with port {msg_info[1]} has terminated their a connection with you")
+        # print("\n>> ", end="")
+
+        # conn_socket.close()
+        i = 1
 
 def valid_args(args):
     valid = True    # Instead of returning immediately, use boolean so it prints all errors
@@ -260,12 +326,15 @@ def check_args(args):
         return False
     elif (has_args == True) and (not create_topology(args.topology_file_name)):     # Error reading topology file
         return False
+    global port
+    port = args.port_number
     return True
 
 def main(args):
     # Check if there are arguments
     if not check_args(args):
         return 1
+    _thread.start_new_thread(setup_server, ())     # Thread for listening
     handle_input()
     return 0
 
