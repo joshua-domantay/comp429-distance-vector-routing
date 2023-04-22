@@ -10,7 +10,7 @@ import argparse
 from socket import *
 
 port = 0
-servers = {}            # server_id : (ip, port) -> servers.get(server_id) = (IP address, port number)
+servers = {}            # server_id : {ip, port} -> servers.get(server_id) = {"ip" : <ip_address>, "port" : <port_number>}
 routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost
 
 def get_ip():
@@ -76,7 +76,7 @@ def read_topology(file_name):
             server_port = int(server_ip_port[2])
             
             # Check connection
-            if (server_ip != get_ip()) or (server_port != port):
+            if (server_ip != get_ip()) or (server_port != port):    # Do not check self
                 if not check_connection(server_ip, server_port):
                     print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format(server_ip, server_port))
                     return
@@ -89,11 +89,11 @@ def read_topology(file_name):
                     return
                 
                 # Check if IP address and port number is already recorded
-                if (servers.get(server)[0] == server_ip) and (servers.get(server)[1] == server_port):
+                if (servers.get(server).get("ip") == server_ip) and (servers.get(server).get("port") == server_port):
                     print("Topology file ERROR: Found duplicate IP address: {} and port number: {} for two server ids".format(server_ip, server_port))
                     return
                 
-            servers[server_id] = (server_ip, server_port)
+            servers[server_id] = {"ip" : server_ip, "port" : server_port}
             num_servers -= 1
         elif num_neighbors > 0:
             server1_server2_cost = line.split(" ")
@@ -198,6 +198,11 @@ def update(server_id1, server_id2, link_cost):
 
 # Command step
 def send_routing_update():
+    for i in servers:
+        server_ip = servers.get(i).get("ip")
+        server_port = servers.get(i).get("port")
+        if (server_ip != get_ip()) or (server_port != port):    # Do not check self
+            print(server_ip + " : " + str(server_port))
     print("step")
 
 # Command packets
@@ -207,6 +212,8 @@ def display_packets():
 # Command display
 def display_routing_table():
     print("display")
+    print(servers)
+    print(routing_table)
 
 # Command disable
 def disable_server(server_id):
@@ -261,17 +268,13 @@ def handle_input():
         print()
 
 def setup_server():
-    try:
-        server_socket = socket(AF_INET, SOCK_STREAM)
-        server_socket.bind((get_ip(), port))
-        server_socket.listen(1)
-        while True:
-            conn_socket, addr = server_socket.accept()
-            msg = conn_socket.recv(1024).decode()
-            print(msg)
-            conn_socket.close()
-    except Exception as e:
-        print("")
+    server_socket = socket(AF_INET, SOCK_STREAM)
+    server_socket.bind((get_ip(), port))
+    server_socket.listen(1)
+    while True:
+        conn_socket, addr = server_socket.accept()
+        msg = conn_socket.recv(1024).decode()
+        conn_socket.close()
 
 def valid_args(args):
     valid = True    # Instead of returning immediately, use boolean so it prints all errors
