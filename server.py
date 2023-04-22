@@ -35,6 +35,15 @@ def valid_port(port):
             return True
     return False
 
+def check_connection(test_ip, test_port):
+    try:
+        test_socket = socket(AF_INET, SOCK_STREAM)
+        test_socket.connect((test_ip, test_port))
+        test_socket.close()
+        return True
+    except Exception as e:
+        return False
+
 def read_topology(file_name):
     topology_file = open(file_name, 'r')
     topology_file_contents = []
@@ -67,9 +76,10 @@ def read_topology(file_name):
             server_port = int(server_ip_port[2])
             
             # Check connection
-            # TODO: socket
-            #     print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format())
-            #     return
+            if (server_ip != get_ip()) or (server_port != port):
+                if not check_connection(server_ip, server_port):
+                    print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format(server_ip, server_port))
+                    return
 
             # Check if data is already recorded
             for server in servers:
@@ -251,29 +261,17 @@ def handle_input():
         print()
 
 def setup_server():
-    # server_socket = socket(AF_INET, SOCK_STREAM)
-    # server_socket.bind((myip(), port))
-    # server_socket.listen(1)
-    while True:
-        # conn_socket, addr = server_socket.accept()
-        # msg = conn_socket.recv(1024).decode()
-        # msg_info = msg[:20]
-        # msg_info = msg_info.split(" ")
-        
-        # if(msg_info[0] == "msg"):       # When message is received
-        #     real_msg = msg[(len(msg_info[0]) + 1 + len(msg_info[1]) + 1):]
-        #     print("\nMessage received from", addr[0])
-        #     print("Sender's Port:", msg_info[1])
-        #     print("Message:", real_msg)
-        # elif(msg_info[0] == "con"):     # When other peer tries to connect
-        #     print("\nThe following peer established a connection with you:")
-        #     print(f"\t\tIP: {addr[0]}, Port: {msg_info[1]}")
-        # else:       # When peer uses terminate
-        #     print(f"\nPeer {addr[0]} with port {msg_info[1]} has terminated their a connection with you")
-        # print("\n>> ", end="")
-
-        # conn_socket.close()
-        i = 1
+    try:
+        server_socket = socket(AF_INET, SOCK_STREAM)
+        server_socket.bind((get_ip(), port))
+        server_socket.listen(1)
+        while True:
+            conn_socket, addr = server_socket.accept()
+            msg = conn_socket.recv(1024).decode()
+            print(msg)
+            conn_socket.close()
+    except Exception as e:
+        print("")
 
 def valid_args(args):
     valid = True    # Instead of returning immediately, use boolean so it prints all errors
@@ -324,10 +322,19 @@ def check_args(args):
     has_args = valid_args(args)
     if has_args == False:       # Has args but not satisfied properly
         return False
-    elif (has_args == True) and (not create_topology(args.topology_file_name)):     # Error reading topology file
-        return False
+    
+    # Set port
     global port
-    port = args.port_number
+    port = int(args.port_number)
+
+    # Check if there is already a server in provided port number
+    if check_connection(get_ip(), port):
+        print("Port number is already being used")
+        return False
+
+    # Read topology file
+    if (has_args == True) and (not create_topology(args.topology_file_name)):
+        return False
     return True
 
 def main(args):
