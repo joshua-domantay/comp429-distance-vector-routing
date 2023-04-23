@@ -7,6 +7,7 @@ import sys
 import os
 import _thread
 import argparse
+import time
 from socket import *
 
 my_id = -1
@@ -44,6 +45,24 @@ def check_connection(test_ip, test_port):
         return True
     except Exception as e:
         return False
+    
+def find_server_id(ip, port):
+    for i in servers:
+        if (str(servers.get(i).get("ip")) == str(ip)) and (int(servers.get(i).get("port")) == int(port)):
+            return i
+    return False
+    
+def parse_my_routing_table():
+    val = ""
+    for i in routing_table.get(my_id):
+        val += "{}:{} ".format(i, routing_table.get(my_id).get(i))
+    return val
+
+def update_routing_table(id, data):
+    for i in data:
+        if len(i) > 0:
+            data_val = i.split(":")
+            routing_table.get(id)[int(data_val[0])] = int(data_val[1])
 
 def read_topology(file_name):
     topology_file = open(file_name, 'r')
@@ -77,12 +96,8 @@ def read_topology(file_name):
             server_ip = server_ip_port[1]
             server_port = int(server_ip_port[2])
             
-            # Check connection
-            if (server_ip != get_ip()) or (server_port != port):    # Do not check self
-                if not check_connection(server_ip, server_port):
-                    print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format(server_ip, server_port))
-                    return
-            else:
+            # Get my_id if ip and port matches
+            if (server_ip == get_ip()) and (server_port == port):
                 global my_id
                 my_id = server_id
 
@@ -215,23 +230,22 @@ def update(server_id1, server_id2, link_cost):
 
 # Command step
 def send_routing_update():
+    print("step")
     for i in servers:
         server_ip = servers.get(i).get("ip")
         server_port = servers.get(i).get("port")
         if (server_ip != get_ip()) or (server_port != port):    # Do not check self
-            print(server_ip + " : " + str(server_port))
             send_msg(server_ip, server_port, "update", "TEST")
-    print("step")
 
 def send_msg(send_to_ip, send_to_port, msg_type, msg):
     try:
         client_socket = socket(AF_INET, SOCK_STREAM)
         client_socket.connect((send_to_ip, send_to_port))
-        msg = msg_type + " " + str(port) + " " + msg
+        msg = str(port) + " " + parse_my_routing_table()
         client_socket.send(msg.encode())
         client_socket.close()
     except Exception as e:
-        print(e)
+        pass    # TODO: Update routing table if no change after three update interval
 
 # Command packets
 def display_packets():
@@ -315,25 +329,38 @@ def setup_server():
     while True:
         conn_socket, addr = server_socket.accept()
         msg = conn_socket.recv(1024).decode()
-        print(msg)
+
+        # Notify server and get routing table update
+        msg = msg.split(" ")
+        rt_update = msg[1:]
+        server_id = find_server_id(addr[0], msg[0])
+        if server_id == False:
+            server_id = "unknown server id"
+        else:
+            # Update routing_table with data received
+            update_routing_table(server_id, rt_update)
+        print("RECEIVED A MESSAGE FROM SERVER", server_id)
+
         conn_socket.close()
+
+def periodic_update(interval):
+    last_update = time.time()
+    while True:
+        curr = time.time()
+        if (curr - last_update) >= interval:
+            send_routing_update()
+            last_update = curr
 
 def valid_args(args):
     valid = True    # Instead of returning immediately, use boolean so it prints all errors
 
     # Check first if args contain port number
     if args.port_number is None:
-        print("Port number is missing\nUse -h or --help for more information")
-        return False
-    
-    # Check if port number is valid
-    if not valid_port(args.port_number):
+        print("Port number is missing")
+        valid = False
+    elif not valid_port(args.port_number):    # Check if port number is valid
         print("Port number is invalid")
-        return False
-
-    # Check if no args satisfied
-    if (args.topology_file_name is None) and (args.update_interval is None):
-        return      # Return None which means not applicable
+        valid = False
 
     # Check if all args satisfied
     if (args.topology_file_name is None) or (args.update_interval is None):
@@ -365,7 +392,7 @@ def valid_args(args):
 
 def check_args(args):
     has_args = valid_args(args)
-    if has_args == False:       # Has args but not satisfied properly
+    if not has_args:        # Args not satisfied
         return False
     
     # Set port
@@ -378,15 +405,18 @@ def check_args(args):
         return False
 
     # Read topology file
-    if (has_args == True) and (not create_topology(args.topology_file_name)):
+    if not create_topology(args.topology_file_name):
         return False
     return True
 
 def main(args):
     # Check if there are arguments
     if not check_args(args):
+        print("Use -h or --help for more information")
         return 1
-    _thread.start_new_thread(setup_server, ())     # Thread for listening
+    interval = int(args.update_interval)
+    _thread.start_new_thread(periodic_update, (interval,))      # Thread for periodic update
+    _thread.start_new_thread(setup_server, ())                  # Thread for server (listening)
     handle_input()
     return 0
 
