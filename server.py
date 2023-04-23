@@ -9,9 +9,10 @@ import _thread
 import argparse
 from socket import *
 
+my_id = -1
 port = 0
 servers = {}            # server_id : {ip, port} -> servers.get(server_id) = {"ip" : <ip_address>, "port" : <port_number>}
-routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost
+routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost. -1 = Infinity
 
 def get_ip():
     hostname = gethostname()
@@ -61,6 +62,7 @@ def read_topology(file_name):
     
     num_servers = int(topology_file_contents[0])
     num_neighbors = int(topology_file_contents[1])
+    server_ids_recorded = []
     for i in range(2, len(topology_file_contents)):
         line = topology_file_contents[i]
         if num_servers > 0:
@@ -80,6 +82,9 @@ def read_topology(file_name):
                 if not check_connection(server_ip, server_port):
                     print("Topology file ERROR: Cannot connect to IP address: {} with port number: {}".format(server_ip, server_port))
                     return
+            else:
+                global my_id
+                my_id = server_id
 
             # Check if data is already recorded
             for server in servers:
@@ -95,6 +100,8 @@ def read_topology(file_name):
                 
             servers[server_id] = {"ip" : server_ip, "port" : server_port}
             num_servers -= 1
+
+            server_ids_recorded.append(server_id)
         elif num_neighbors > 0:
             server1_server2_cost = line.split(" ")
 
@@ -122,6 +129,16 @@ def read_topology(file_name):
 
     # If topology file is correct, num_neighbors should be 0
     # But program will still work even if num_neighbors > 0
+
+    for i in server_ids_recorded:
+        if not routing_table.get(i):
+            routing_table[i] = {}
+        for j in server_ids_recorded:
+            if (my_id == i) and (my_id == j):
+                routing_table.get(i)[j] = 0     # Cost to self is 0
+            elif not routing_table.get(i).get(j):
+                routing_table.get(i)[j] = -1    # -1 = Infinity
+
     return True
 
 def create_topology(file_name):
@@ -203,7 +220,18 @@ def send_routing_update():
         server_port = servers.get(i).get("port")
         if (server_ip != get_ip()) or (server_port != port):    # Do not check self
             print(server_ip + " : " + str(server_port))
+            send_msg(server_ip, server_port, "update", "TEST")
     print("step")
+
+def send_msg(send_to_ip, send_to_port, msg_type, msg):
+    try:
+        client_socket = socket(AF_INET, SOCK_STREAM)
+        client_socket.connect((send_to_ip, send_to_port))
+        msg = msg_type + " " + str(port) + " " + msg
+        client_socket.send(msg.encode())
+        client_socket.close()
+    except Exception as e:
+        print(e)
 
 # Command packets
 def display_packets():
@@ -211,9 +239,22 @@ def display_packets():
 
 # Command display
 def display_routing_table():
-    print("display")
     print(servers)
-    print(routing_table)
+
+    # Print header
+    print("".ljust(6), end="")
+    for i in routing_table:
+        print(str(i).ljust(6), end="")
+    print()
+    
+    for i in routing_table:
+        print(str(i).ljust(6), end="")
+        for j in routing_table:
+            val = routing_table.get(i)[j]
+            if val == -1:
+                val = "inf"
+            print(str(val).ljust(6), end="")
+        print()
 
 # Command disable
 def disable_server(server_id):
@@ -274,6 +315,7 @@ def setup_server():
     while True:
         conn_socket, addr = server_socket.accept()
         msg = conn_socket.recv(1024).decode()
+        print(msg)
         conn_socket.close()
 
 def valid_args(args):
