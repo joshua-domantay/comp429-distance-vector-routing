@@ -265,7 +265,7 @@ def update(server_id1, server_id2, link_cost):
         val = -1
     else:
         val = int(link_cost)
-    routing_table.get(int(server_id1))[int(server_id2)] = val
+    # routing_table.get(int(server_id1))[int(server_id2)] = val
 
     # Update neighbors
     if int(server_id1) == my_id:
@@ -400,7 +400,6 @@ def setup_server():
             server_id = int(msg[2])
             link_cost = int(msg[3])
             neighbors[int(server_id)] = link_cost
-            print(neighbors)
 
         conn_socket.close()
 
