@@ -235,16 +235,16 @@ def send_routing_update(server_call):
         server_ip = servers.get(i).get("ip")
         server_port = servers.get(i).get("port")
         if (server_ip != get_ip()) or (server_port != port):    # Do not check self
-            send_msg(server_ip, server_port, "update", "TEST")
+            send_msg(server_ip, server_port, "pkt")
 
     if not server_call:
         print("step SUCCESS")
 
-def send_msg(send_to_ip, send_to_port, msg_type, msg):
+def send_msg(send_to_ip, send_to_port, msg_type):
     try:
         client_socket = socket(AF_INET, SOCK_STREAM)
         client_socket.connect((send_to_ip, send_to_port))
-        msg = str(port) + " " + parse_my_routing_table()
+        msg = msg_type + " " + str(port) + " " + parse_my_routing_table()
         client_socket.send(msg.encode())
         client_socket.close()
     except Exception as e:
@@ -331,16 +331,18 @@ def setup_server():
 
         # Notify server and get routing table update
         msg = msg.split(" ")
-        rt_update = msg[1:]
-        server_id = find_server_id(addr[0], msg[0])
-        if server_id == False:
-            server_id = "unknown server id"
-        else:
-            # Update routing_table with data received
-            update_routing_table(server_id, rt_update)
-            global packets
-            packets += 1
-        print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
+        msg_type = msg[0]
+        if msg_type == "pkt":
+            rt_update = msg[2:]
+            server_id = find_server_id(addr[0], msg[1])
+            if server_id == False:
+                server_id = "unknown server id"
+            else:
+                # Update routing_table with data received
+                update_routing_table(server_id, rt_update)
+                global packets
+                packets += 1
+            print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
 
         conn_socket.close()
 
