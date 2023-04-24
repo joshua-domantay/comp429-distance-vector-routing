@@ -14,6 +14,7 @@ my_id = -1
 port = 0
 servers = {}            # server_id : {ip, port} -> servers.get(server_id) = {"ip" : <ip_address>, "port" : <port_number>}
 routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost. -1 = Infinity
+packets = 0
 
 def get_ip():
     hostname = gethostname()
@@ -195,7 +196,7 @@ def list_commands():
     print("  > Disable the link to a given server")
     print("crash")
     print("  > Close all connections on all links (simulate server crashes)")
-    print()
+    print("help SUCCESS")
 
 # Command update
 def update(server_id1, server_id2, link_cost):
@@ -225,17 +226,19 @@ def update(server_id1, server_id2, link_cost):
     if not valid:
         return errorMsg     # Return list of error messages
     
-    print("update <server_id1> <server_id2> <link_cost>")
     return True
 
 # Command step
-def send_routing_update():
-    print("step")
+def send_routing_update(server_call):
+    # TODO: Update routing table before sending
     for i in servers:
         server_ip = servers.get(i).get("ip")
         server_port = servers.get(i).get("port")
         if (server_ip != get_ip()) or (server_port != port):    # Do not check self
             send_msg(server_ip, server_port, "update", "TEST")
+
+    if not server_call:
+        print("step SUCCESS")
 
 def send_msg(send_to_ip, send_to_port, msg_type, msg):
     try:
@@ -249,12 +252,11 @@ def send_msg(send_to_ip, send_to_port, msg_type, msg):
 
 # Command packets
 def display_packets():
-    print("packets")
+    print("Number of packets received: {}".format(packets))
+    print("packets SUCCESS")
 
 # Command display
 def display_routing_table():
-    print(servers)
-
     # Print header
     print("".ljust(6), end="")
     for i in routing_table:
@@ -270,6 +272,8 @@ def display_routing_table():
             print(str(val).ljust(6), end="")
         print()
 
+    print("display SUCCESS")
+
 # Command disable
 def disable_server(server_id):
     checkId = check_server_id(server_id)
@@ -280,14 +284,13 @@ def disable_server(server_id):
 
 # Command crash
 def crash():
-    print("crash")
+    print("crash SUCCESS")
 
 def handle_input():
     while True:
         user_input = input(">> ")
         user_input = user_input.lower().split(" ")
         if user_input[0] == "help":
-            print("help SUCCESS")
             list_commands()
         if user_input[0] == "update":
             if len(user_input) == 4:
@@ -299,13 +302,10 @@ def handle_input():
             else:
                 print("update Please provide two server ids and link cost. Use \"help\" for more info")
         if user_input[0] == "step":
-            print("step SUCCESS")
-            send_routing_update()
+            send_routing_update(False)
         if user_input[0] == "packets":
-            print("packets SUCCESS")
             display_packets()
         if user_input[0] == "display":
-            print("display SUCCESS")
             display_routing_table()
         if user_input[0] == "disable":
             if len(user_input) == 2:
@@ -317,7 +317,6 @@ def handle_input():
             else:
                 print("disable Please provide server id. Use \"help\" for more info")
         if user_input[0] == "crash":
-            print("crash SUCCESS")
             crash()
             break
         print()
@@ -339,7 +338,9 @@ def setup_server():
         else:
             # Update routing_table with data received
             update_routing_table(server_id, rt_update)
-        print("RECEIVED A MESSAGE FROM SERVER", server_id)
+            global packets
+            packets += 1
+        print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
 
         conn_socket.close()
 
@@ -348,7 +349,7 @@ def periodic_update(interval):
     while True:
         curr = time.time()
         if (curr - last_update) >= interval:
-            send_routing_update()
+            send_routing_update(True)
             last_update = curr
 
 def valid_args(args):
