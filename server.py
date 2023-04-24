@@ -66,7 +66,6 @@ def update_routing_table():
             new_val = get_least_cost(server)
             if new_val != False:
                 routing_table.get(my_id)[server] = new_val
-            print(str(server) + " : " + str(new_val))
 
 def update_routing_table_received(id, data):
     for i in data:
@@ -239,27 +238,46 @@ def update(server_id1, server_id2, link_cost):
     errorMsg = []
 
     # Check if server_id1 is valid, else add to errorMsg
-    check1 = check_server_id(server_id1)
+    check1 = check_server_id(int(server_id1))
     if check1 != True:
         for i in check1:
             errorMsg.append(i)
         valid = False
 
     # Check if server_id2 is valid, else add to errorMsg
-    check2 = check_server_id(server_id2)
+    check2 = check_server_id(int(server_id2))
     if check2 != True:
         for i in check2:
             errorMsg.append(i)
         valid = False
 
     # Check if link_cost is valid
-    if not link_cost.isdigit():
+    if (not link_cost.isdigit()) and (link_cost.lower() != "inf"):
         errorMsg.append("Link cost must be a positive integer or infinity (inf)")
         valid = False
 
     if not valid:
         return errorMsg     # Return list of error messages
     
+    # Update routing table
+    val = link_cost
+    if val.lower() == "inf":
+        val = -1
+    else:
+        val = int(link_cost)
+    routing_table.get(int(server_id1))[int(server_id2)] = val
+
+    # Update neighbors
+    if int(server_id1) == my_id:
+        neighbors[int(server_id2)] = val
+    else:
+        send_msg(servers.get(int(server_id1)).get("ip"), servers.get(int(server_id1)).get("port"), "lcu", (str(server_id2) + " " + str(val)))
+        
+    if int(server_id2) == my_id:
+        neighbors[int(server_id1)] = val
+    else:
+        send_msg(servers.get(int(server_id2)).get("ip"), servers.get(int(server_id2)).get("port"), "lcu", (str(server_id1) + " " + str(val)))
+
     return True
 
 # Command step
@@ -270,16 +288,16 @@ def send_routing_update(server_call):
         server_ip = servers.get(i).get("ip")
         server_port = servers.get(i).get("port")
         if (server_ip != get_ip()) or (server_port != port):    # Do not check self
-            send_msg(server_ip, server_port, "pkt")
+            send_msg(server_ip, server_port, "pkt", parse_routing_table())
 
     if not server_call:
         print("step SUCCESS")
 
-def send_msg(send_to_ip, send_to_port, msg_type):
+def send_msg(send_to_ip, send_to_port, msg_type, msg):
     try:
         client_socket = socket(AF_INET, SOCK_STREAM)
         client_socket.connect((send_to_ip, send_to_port))
-        msg = msg_type + " " + str(port) + " " + parse_routing_table()
+        msg = msg_type + " " + str(port) + " " + msg
         client_socket.send(msg.encode())
         client_socket.close()
     except Exception as e:
@@ -378,6 +396,11 @@ def setup_server():
                 global packets
                 packets += 1
             print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
+        elif msg_type == "lcu":
+            server_id = int(msg[2])
+            link_cost = int(msg[3])
+            neighbors[int(server_id)] = link_cost
+            print(neighbors)
 
         conn_socket.close()
 
