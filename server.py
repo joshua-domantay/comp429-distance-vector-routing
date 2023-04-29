@@ -162,9 +162,9 @@ def check_server_id(server_id):
     error = check_server_id_errors(server_id)
     errorMsg = []
     if error == 2:
-        errorMsg.append("Server id \"" + server_id + "\" is not a digit")
+        errorMsg.append("Server id \"" + str(server_id) + "\" is not a digit")
     elif error == 1:
-        errorMsg.append("Cannot find server id \"" + server_id + "\"")
+        errorMsg.append("Cannot find server id \"" + str(server_id) + "\"")
     else:
         return True
     return errorMsg
@@ -173,7 +173,7 @@ def check_server_id_errors(server_id):
     if (not isinstance(server_id, int)) and (not server_id.isdigit()):
         return 2
 
-    if not routing_table.get(server_id):
+    if not routing_table.get(int(server_id)):
         return 1
 
     return 0
@@ -354,9 +354,7 @@ def display_packets():
 # Command display
 def display_routing_table():
     for i in neighbors:
-        print(str(i) + " : " + str(neighbors[i]))
-    print()
-
+        print(i)
     # Print header
     print("".ljust(6), end="")
     for i in routing_table:
@@ -369,21 +367,21 @@ def display_routing_table():
             val = routing_table.get(i).get(j)["distance"]
             if val == -1:
                 val = "inf"
-            print((str(val)+":"+str(routing_table.get(i).get(j)["path"])).ljust(6), end="")
+            print(str(val).ljust(6), end="")
         print()
 
     print("display SUCCESS")
 
 # Command disable
 def disable_server(server_id):
-    server_id = int(server_id)
-
     checkId = check_server_id(server_id)
     if checkId != True:
         return checkId
     
+    server_id = int(server_id)
+
     if not server_id in neighbors:
-        return ["Server id {} is not a neighbor"]
+        return ["Server id {} is not a neighbor".format(server_id)]
     
     # Set server to neighbor link cost to Infinity (-1)
     neighbors[server_id] = -1
@@ -397,10 +395,13 @@ def disable_server(server_id):
     set_all_distance_infinity_with_path(my_id)
     set_all_distance_infinity_with_path(server_id)
 
-    # Send update to all servers in routing table
+    # Send update to neighbor
     send_msg(servers.get(int(server_id)).get("ip"), servers.get(int(server_id)).get("port"), "lcu", (str(my_id) + " -1"))
 
-    display_routing_table()
+    # Send update to other servers in routing table
+    for server in routing_table:
+        if (server != my_id) and (server != server_id):
+            send_msg(servers.get(int(server)).get("ip"), servers.get(int(server)).get("port"), "dlc", (str(my_id) + ":" + str(server_id)))
 
     return True
 
@@ -454,7 +455,7 @@ def setup_server():
         # Notify server and get routing table update
         msg = msg.split(" ")
         msg_type = msg[0]
-        if msg_type == "pkt":
+        if msg_type == "pkt":       # Received updated routing table from a server
             rt_update = msg[2:]
             server_id = get_server_id(addr[0], msg[1])
             if server_id == False:
@@ -466,7 +467,7 @@ def setup_server():
                 packets += 1
                 servers.get(server_id)["updated"] = True
             print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
-        elif msg_type == "lcu":
+        elif msg_type == "lcu":     # Receive updated link cost between another server
             server_id = int(msg[2])
             link_cost = int(msg[3])
             neighbors[server_id] = link_cost
@@ -483,6 +484,13 @@ def setup_server():
                 # Set all link cost that paths to server_id
                 set_all_distance_infinity_with_path(my_id)
                 set_all_distance_infinity_with_path(server_id)
+        elif msg_type == "dlc":     # Receive information about disabled link cost between two other servers
+            server_id1 = int(msg[2].split(":")[0])
+            server_id2 = int(msg[2].split(":")[1])
+
+            # Set all link cost that paths to server_id
+            set_all_distance_infinity_with_path(server_id1)
+            set_all_distance_infinity_with_path(server_id2)
 
         conn_socket.close()
 
