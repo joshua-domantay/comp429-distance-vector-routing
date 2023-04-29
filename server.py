@@ -12,7 +12,7 @@ from socket import *
 
 my_id = -1
 port = 0
-servers = {}            # server_id : {ip, port} -> servers.get(server_id) = {"ip" : <ip_address>, "port" : <port_number>}
+servers = {}            # server_id : {ip, port, updated, update count} -> update count means the number of consecutive updates before implying server crashed
 routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost. -1 = Infinity
 neighbors = {}
 packets = 0
@@ -39,66 +39,10 @@ def valid_port(port):
             return True
     return False
 
-def check_connection(test_ip, test_port):
-    try:
-        test_socket = socket(AF_INET, SOCK_STREAM)
-        test_socket.connect((test_ip, test_port))
-        test_socket.close()
-        return True
-    except Exception as e:
+def create_topology(file_name):
+    if not read_topology(file_name):    # Error reading topology file
         return False
-    
-def find_server_id(ip, port):
-    for i in servers:
-        if (str(servers.get(i).get("ip")) == str(ip)) and (int(servers.get(i).get("port")) == int(port)):
-            return i
-    return False
-    
-def parse_routing_table():
-    val = ""
-    for i in routing_table.get(my_id):
-        val += "{}:{} ".format(i, routing_table.get(my_id).get(i))
-    return val
-
-def update_routing_table():
-    for server in servers:
-        if server != my_id:
-            new_val = get_least_cost(server)
-            if new_val != False:
-                routing_table.get(my_id)[server] = new_val
-
-def update_routing_table_received(id, data):
-    for i in data:
-        if len(i) > 0:
-            data_val = i.split(":")
-            routing_table.get(id)[int(data_val[0])] = int(data_val[1])
-
-def fill_routing_table(server_ids):
-    # Fill empty values of routing table
-    for i in server_ids:
-        if not routing_table.get(i):
-            routing_table[i] = {}
-        for j in server_ids:
-            if (my_id == i) and (my_id == j):
-                routing_table.get(i)[j] = 0     # Cost to self is 0
-            elif not routing_table.get(i).get(j):
-                routing_table.get(i)[j] = -1    # -1 = Infinity
-
-# Bellman-Ford equation C(x,v)
-def get_cost(server_id1, server_id2):
-    return routing_table.get(server_id1)[server_id2]
-
-# Bellman-Ford equation D_x(y) = min_v{c(x,v) + d_v(y)}
-def get_least_cost(server_id2):
-    all_cost = []
-    for v in neighbors:
-        val1 = neighbors.get(v)
-        val2 = get_cost(v, server_id2)
-        if (int(val1) != -1) and (int(val2) != -1):
-            all_cost.append(neighbors.get(v) + get_cost(v, server_id2))
-    if len(all_cost) > 0:
-        return min(all_cost)
-    return False
+    return True
 
 def read_topology(file_name):
     topology_file = open(file_name, 'r')
@@ -149,7 +93,7 @@ def read_topology(file_name):
                     print("Topology file ERROR: Found duplicate IP address: {} and port number: {} for two server ids".format(server_ip, server_port))
                     return
                 
-            servers[server_id] = {"ip" : server_ip, "port" : server_port}
+            servers[server_id] = {"ip" : server_ip, "port" : server_port, "updated" : True, "updateCount" : 3}
             num_servers -= 1
 
             server_ids_recorded.append(server_id)
@@ -178,7 +122,7 @@ def read_topology(file_name):
             elif server_id2 == my_id:
                 neighbors[server_id1] = link_cost
 
-            routing_table.get(server_id1)[server_id2] = link_cost
+            routing_table.get(server_id1)[server_id2] = {"distance" : link_cost, "path" : server_id2}
             num_neighbors -= 1
         else:
             break       # Do not read other lines
@@ -190,20 +134,30 @@ def read_topology(file_name):
 
     return True
 
-def create_topology(file_name):
-    if not read_topology(file_name):    # Error reading topology file
-        return False
-    return True
+def fill_routing_table(server_ids):
+    # Fill empty values of routing table
+    for i in server_ids:
+        if not routing_table.get(i):
+            routing_table[i] = {}
+        for j in server_ids:
+            if (my_id == i) and (my_id == j):
+                routing_table.get(i)[j] = {"distance" : 0, "path" : j}       # Cost to self is 0
+            elif not routing_table.get(i).get(j):
+                routing_table.get(i)[j] = {"distance" : -1, "path" : j}      # -1 = Infinity
 
-def check_server_id_errors(server_id):
-    if (not isinstance(server_id, int)) and (not server_id.isdigit()):
-        return 2
+def parse_routing_table():
+    val = ""
+    for i in routing_table.get(my_id):
+        val += "{}:{}+{} ".format(i, routing_table.get(my_id).get(i)["distance"], routing_table.get(my_id).get(i)["path"])
+    return val
 
-    if not servers.get(server_id):
-        return 1
-
-    return 0
-    
+def get_server_id(ip, port):
+    for i in servers:
+        if (str(servers.get(i).get("ip")) == str(ip)) and (int(servers.get(i).get("port")) == int(port)):
+            return i
+    return False
+   
+# Make sure server id is valid
 def check_server_id(server_id):
     error = check_server_id_errors(server_id)
     errorMsg = []
@@ -214,6 +168,75 @@ def check_server_id(server_id):
     else:
         return True
     return errorMsg
+
+def check_server_id_errors(server_id):
+    if (not isinstance(server_id, int)) and (not server_id.isdigit()):
+        return 2
+
+    if not servers.get(server_id):
+        return 1
+
+    return 0
+
+# Update own routing table
+def update_routing_table():
+    for server in routing_table:
+        if server != my_id:
+            new_val = get_least_cost(server)
+            if new_val != False:
+                routing_table.get(my_id).get(server)["distance"] = new_val[0]
+                routing_table.get(my_id).get(server)["path"] = new_val[1]
+
+# Update routing table for specific server id
+def update_routing_table_received(id, data):
+    for i in data:
+        if len(i) > 0:
+            data_val = i.split(":")
+            dist_path = data_val[1].split("+")
+            if routing_table.get(id):
+                if routing_table.get(id).get(int(data_val[0])):
+                    routing_table.get(id).get(int(data_val[0]))["distance"] = int(dist_path[0])
+                    routing_table.get(id).get(int(data_val[0]))["path"] = int(dist_path[1])
+
+# Bellman-Ford equation C(x,v)
+def get_cost(server_id1, server_id2):
+    return routing_table.get(server_id1).get(server_id2)["distance"]
+
+# Bellman-Ford equation D_x(y) = min_v{c(x,v) + d_v(y)}
+def get_least_cost(server_id2):
+    all_cost = []
+    all_path = []
+    for v in neighbors:
+        if routing_table.get(v):    # Check if v is still in routing_table (if server has not crashed)
+            val1 = neighbors.get(v)
+            val2 = get_cost(v, server_id2)
+            if (int(val1) != -1) and (int(val2) != -1):
+                all_cost.append(neighbors.get(v) + get_cost(v, server_id2))
+                all_path.append(v)
+    if len(all_cost) > 0:
+        return (min(all_cost), all_path[all_cost.index(min(all_cost))])
+    return False    
+
+# Update routing table after server crash
+def handle_server_crash(server_id):
+    for i in routing_table:
+        if i != server_id:
+            del routing_table.get(i)[server_id]
+    del routing_table[server_id]
+
+    for i in routing_table:
+        for j in routing_table.get(i):
+            if routing_table.get(i).get(j)["path"] == server_id:
+                routing_table.get(i).get(j)["distance"] = -1
+
+def check_connection(test_ip, test_port):
+    try:
+        test_socket = socket(AF_INET, SOCK_STREAM)
+        test_socket.connect((test_ip, test_port))
+        test_socket.close()
+        return True
+    except Exception as e:
+        return False
 
 # Command help
 def list_commands():
@@ -284,11 +307,25 @@ def update(server_id1, server_id2, link_cost):
 def send_routing_update(server_call):
     update_routing_table()
 
-    for i in servers:
-        server_ip = servers.get(i).get("ip")
-        server_port = servers.get(i).get("port")
-        if (server_ip != get_ip()) or (server_port != port):    # Do not check self
-            send_msg(server_ip, server_port, "pkt", parse_routing_table())
+    server_crashes = []
+    for i in routing_table:
+        if my_id != i:
+            server_ip = servers.get(i).get("ip")
+            server_port = servers.get(i).get("port")
+            if (server_ip != get_ip()) or (server_port != port):    # Do not check self
+                send_msg(server_ip, server_port, "pkt", parse_routing_table())
+
+            if server_call:
+                if servers.get(i).get("updated"):
+                    servers.get(i)["updateCount"] = 3
+                elif servers.get(i).get("updateCount") <= 0:
+                    server_crashes.append(i)
+                else:
+                    servers.get(i)["updateCount"] = servers.get(i).get("updateCount") - 1
+                servers.get(i)["updated"] = False
+
+    for i in server_crashes:
+        handle_server_crash(i)
 
     if not server_call:
         print("step SUCCESS")
@@ -301,7 +338,7 @@ def send_msg(send_to_ip, send_to_port, msg_type, msg):
         client_socket.send(msg.encode())
         client_socket.close()
     except Exception as e:
-        pass    # TODO: Update routing table if no change after three update interval
+        pass
 
 # Command packets
 def display_packets():
@@ -319,7 +356,7 @@ def display_routing_table():
     for i in routing_table:
         print(str(i).ljust(6), end="")
         for j in routing_table:
-            val = routing_table.get(i)[j]
+            val = routing_table.get(i).get(j)["distance"]
             if val == -1:
                 val = "inf"
             print(str(val).ljust(6), end="")
@@ -387,7 +424,7 @@ def setup_server():
         msg_type = msg[0]
         if msg_type == "pkt":
             rt_update = msg[2:]
-            server_id = find_server_id(addr[0], msg[1])
+            server_id = get_server_id(addr[0], msg[1])
             if server_id == False:
                 server_id = "unknown server id"
             else:
@@ -395,6 +432,7 @@ def setup_server():
                 update_routing_table_received(server_id, rt_update)
                 global packets
                 packets += 1
+                servers.get(server_id)["updated"] = True
             print("\nRECEIVED A MESSAGE FROM SERVER {}\n\n>> ".format(server_id), end="")
         elif msg_type == "lcu":
             server_id = int(msg[2])
