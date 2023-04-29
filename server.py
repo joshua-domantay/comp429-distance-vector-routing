@@ -13,8 +13,8 @@ from socket import *
 my_id = -1
 port = 0
 servers = {}            # server_id : {ip, port, updated, update count} -> update count means the number of consecutive updates before implying server crashed
-routing_table = {}      # From x to y link cost -> routing_table.get(x).get(y) = x to y cost. -1 = Infinity
-neighbors = {}
+routing_table = {}      # From x to y, distance and path -> routing_table.get(x).get(y) = {"distance" : _, "path" : _}. Distance = -1 = Infinity
+neighbors = {}          # server_id : link cost
 packets = 0
 
 def get_ip():
@@ -173,7 +173,7 @@ def check_server_id_errors(server_id):
     if (not isinstance(server_id, int)) and (not server_id.isdigit()):
         return 2
 
-    if not servers.get(server_id):
+    if not routing_table.get(server_id):
         return 1
 
     return 0
@@ -219,15 +219,21 @@ def get_least_cost(server_id2):
 
 # Update routing table after server crash
 def handle_server_crash(server_id):
+    # Remove routing to server_id
     for i in routing_table:
         if i != server_id:
             del routing_table.get(i)[server_id]
-    del routing_table[server_id]
+    del routing_table[server_id]    # Remove routing table for server_id
 
+    # Set all distances to infinity that paths through server_id
+    set_all_distance_infinity_with_path(server_id)
+
+def set_all_distance_infinity_with_path(server_id):
     for i in routing_table:
         for j in routing_table.get(i):
             if routing_table.get(i).get(j)["path"] == server_id:
-                routing_table.get(i).get(j)["distance"] = -1
+                if i != j:
+                    routing_table.get(i).get(j)["distance"] = -1
 
 def check_connection(test_ip, test_port):
     try:
@@ -347,6 +353,10 @@ def display_packets():
 
 # Command display
 def display_routing_table():
+    for i in neighbors:
+        print(str(i) + " : " + str(neighbors[i]))
+    print()
+
     # Print header
     print("".ljust(6), end="")
     for i in routing_table:
@@ -359,18 +369,40 @@ def display_routing_table():
             val = routing_table.get(i).get(j)["distance"]
             if val == -1:
                 val = "inf"
-            print(str(val).ljust(6), end="")
+            print((str(val)+":"+str(routing_table.get(i).get(j)["path"])).ljust(6), end="")
         print()
 
     print("display SUCCESS")
 
 # Command disable
 def disable_server(server_id):
+    server_id = int(server_id)
+
     checkId = check_server_id(server_id)
     if checkId != True:
         return checkId
     
-    print("disable <server_id>")
+    if not server_id in neighbors:
+        return ["Server id {} is not a neighbor"]
+    
+    # Set server to neighbor link cost to Infinity (-1)
+    neighbors[server_id] = -1
+    routing_table.get(my_id).get(server_id)["distance"] = -1
+    routing_table.get(my_id).get(server_id)["path"] = server_id
+
+    routing_table.get(server_id).get(my_id)["distance"] = -1
+    routing_table.get(server_id).get(my_id)["path"] = server_id
+
+    # Set all link cost that paths to server_id
+    set_all_distance_infinity_with_path(my_id)
+    set_all_distance_infinity_with_path(server_id)
+
+    # Send update to all servers in routing table
+    send_msg(servers.get(int(server_id)).get("ip"), servers.get(int(server_id)).get("port"), "lcu", (str(my_id) + " -1"))
+
+    display_routing_table()
+
+    return True
 
 # Command crash
 def crash():
@@ -437,7 +469,20 @@ def setup_server():
         elif msg_type == "lcu":
             server_id = int(msg[2])
             link_cost = int(msg[3])
-            neighbors[int(server_id)] = link_cost
+            neighbors[server_id] = link_cost
+
+            # If link cost is -1, update routing table
+            if link_cost == -1:
+                # Set server to neighbor link cost to Infinity (-1)
+                routing_table.get(my_id).get(server_id)["distance"] = -1
+                routing_table.get(my_id).get(server_id)["path"] = server_id
+
+                routing_table.get(server_id).get(my_id)["distance"] = -1
+                routing_table.get(server_id).get(my_id)["path"] = server_id
+
+                # Set all link cost that paths to server_id
+                set_all_distance_infinity_with_path(my_id)
+                set_all_distance_infinity_with_path(server_id)
 
         conn_socket.close()
 
