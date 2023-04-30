@@ -321,6 +321,7 @@ def send_routing_update(server_call):
             if (server_ip != get_ip()) or (server_port != port):    # Do not check self
                 send_msg(server_ip, server_port, "pkt", parse_routing_table())
 
+            # Check if a server has not sent a message after 3 intervals
             if server_call:
                 if servers.get(i).get("updated"):
                     servers.get(i)["updateCount"] = 3
@@ -353,12 +354,6 @@ def display_packets():
 
 # Command display
 def display_routing_table():
-    for i in neighbors:
-        print(str(i) + " > " + str(neighbors.get(i)))
-    print("---")
-    for i in routing_table:
-        print(str(i) + " > " + str(routing_table.get(i)))
-    
     # Print header
     print("".ljust(6), end="")
     for i in routing_table:
@@ -409,6 +404,11 @@ def disable_server(server_id):
 
 # Command crash
 def crash():
+    for i in routing_table:
+        server_ip = servers.get(i).get("ip")
+        server_port = servers.get(i).get("port")
+        if(server_ip != get_ip()) or (server_port != port):     # Do not check self
+            send_msg(server_ip, server_port, "crash", "")
     print("crash SUCCESS")
 
 def handle_input():
@@ -486,6 +486,9 @@ def setup_server():
             # Set all link cost that paths to server_id 1 or server_id 2
             set_all_distance_infinity_with_path(server_id1)
             set_all_distance_infinity_with_path(server_id2)
+        elif msg_type == "crash":
+            server_id = get_server_id(addr[0], msg[1])
+            handle_server_crash(server_id)
 
         conn_socket.close()
 
