@@ -354,7 +354,11 @@ def display_packets():
 # Command display
 def display_routing_table():
     for i in neighbors:
-        print(i)
+        print(str(i) + " > " + str(neighbors.get(i)))
+    print("---")
+    for i in routing_table:
+        print(str(i) + " > " + str(routing_table.get(i)))
+    
     # Print header
     print("".ljust(6), end="")
     for i in routing_table:
@@ -383,15 +387,13 @@ def disable_server(server_id):
     if not server_id in neighbors:
         return ["Server id {} is not a neighbor".format(server_id)]
     
-    # Set server to neighbor link cost to Infinity (-1)
+    if server_id == my_id:
+        return ["Cannot disable link to self"]
+    
+    # Set neighbor link cost to Infinity (-1)
     neighbors[server_id] = -1
-    routing_table.get(my_id).get(server_id)["distance"] = -1
-    routing_table.get(my_id).get(server_id)["path"] = server_id
 
-    routing_table.get(server_id).get(my_id)["distance"] = -1
-    routing_table.get(server_id).get(my_id)["path"] = server_id
-
-    # Set all link cost that paths to server_id
+    # Set all link cost to infinity that paths to server_id and my_id
     set_all_distance_infinity_with_path(my_id)
     set_all_distance_infinity_with_path(server_id)
 
@@ -474,21 +476,14 @@ def setup_server():
 
             # If link cost is -1, update routing table
             if link_cost == -1:
-                # Set server to neighbor link cost to Infinity (-1)
-                routing_table.get(my_id).get(server_id)["distance"] = -1
-                routing_table.get(my_id).get(server_id)["path"] = server_id
-
-                routing_table.get(server_id).get(my_id)["distance"] = -1
-                routing_table.get(server_id).get(my_id)["path"] = server_id
-
-                # Set all link cost that paths to server_id
+                # Set all link cost to infinity that paths to server_id and my_id
                 set_all_distance_infinity_with_path(my_id)
                 set_all_distance_infinity_with_path(server_id)
         elif msg_type == "dlc":     # Receive information about disabled link cost between two other servers
             server_id1 = int(msg[2].split(":")[0])
             server_id2 = int(msg[2].split(":")[1])
 
-            # Set all link cost that paths to server_id
+            # Set all link cost that paths to server_id 1 or server_id 2
             set_all_distance_infinity_with_path(server_id1)
             set_all_distance_infinity_with_path(server_id2)
 
