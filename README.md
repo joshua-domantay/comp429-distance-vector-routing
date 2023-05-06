@@ -43,7 +43,7 @@ The video below shows the program being used to simulate the example topology.<b
 
 ## Installation
 Install the latest version of Python. The version we used for this project is 3.11.2.<br>
-Python modules such as sys, _thread, and socket should be included with the Python installation.<br>
+Python modules such as `sys`, `os`, `_thread`, `argparse` , `time`, and `socket` should be included with the Python installation.<br>
 
 ## How to Run the Program
 1. Open the terminal in the directory where `server.py` is stored.<br>
