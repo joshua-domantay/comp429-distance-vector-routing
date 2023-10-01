@@ -1,5 +1,7 @@
 # Simulating Distance Vector Routing Protocol
-Project for COMP 429 Computer Network Software. Simplified version of the Distance Vector Routing Protocol
+Project for COMP 429 Computer Network Software. Simplified version of the Distance Vector Routing Protocol.<br>
+Simulate distance vector routing protocol using different servers (IP addresses and port numbers).<br>
+Use topology files, display routing tables, change link cost or remove link, and terminate servers.<br>
 
 ## Setting Up Topology Files
 The topology file will have the following layout:
