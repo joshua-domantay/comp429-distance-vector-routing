@@ -32,7 +32,7 @@ The next lines setup the link costs between neighboring servers. Each line shoul
 3. Link cost between the two servers
 
 ## Example Topology
-![alt text](https://github.com/joshua-domantay/comp429-distance-vector-routing/blob/main/topology_example.png?raw=true)<br>
+![Example topology diagram](https://github.com/joshua-domantay/comp429-distance-vector-routing/blob/main/topology_example.png?raw=true)<br>
 The topology files `topology1.txt`, `topology2.txt`, `topology3.txt`, and `topology4.txt` will setup the network topology shown above.<br>
 The number of the topology file corresponds to the server id:<br>
 - So `topology1.txt` is the toplogy file for server 1,<br>
